@@ -11,3 +11,45 @@ Bounding Box Regression with Uncertainty for Accurate Object Detection
   year={2019},
   organization={IEEE}
 }
+
+### How to write the prototxt?
+
+if you have three inputs (not include weights)
+
+```
+layer {
+  name: "loss_kl"
+  type: "KlLoss"
+  bottom: "coor"
+  bottom: "theta"
+  bottom: "label"
+  top: "kl_loss"
+  propagate_down: 1
+  propagate_down: 1
+  propagate_down: 0
+  loss_weight: 1
+}
+```
+
+
+if you have four inputs (include weights)
+
+```
+layer {
+  name: "loss_kl"
+  type: "KlLoss"
+  bottom: "coor"
+  bottom: "theta"
+  bottom: "label"
+  bottom: "weight"
+  top: "kl_loss"
+  propagate_down: true
+  propagate_down: true
+  propagate_down: false
+  propagate_down: false
+  include {
+    phase: TRAIN
+  }
+}
+
+```
