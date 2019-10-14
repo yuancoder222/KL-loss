@@ -23,8 +23,8 @@ class KlLossLayer : public LossLayer<Dtype> {
   virtual inline const char* type() const { return "KlLoss"; }
 
   virtual inline int ExactNumBottomBlobs() const { return -1; }
-  virtual inline int MinBottomBlobs() const {return 2; }
-  virtual inline int MaxBottomBlobs() const {return 3; }
+  virtual inline int MinBottomBlobs() const {return 3; }
+  virtual inline int MaxBottomBlobs() const {return 4; }
   virtual inline int ExactNumTopBlobs() const {return -1; }
   virtual inline int MinTopBlobs() const {return 1; }
   virtual inline int MaxTopBlobs() const {return 2; }
@@ -45,6 +45,8 @@ class KlLossLayer : public LossLayer<Dtype> {
   Blob<Dtype> diff_;
   Blob<Dtype> error_;
   Blob<Dtype> ones_;
+  Dtype normalize_divider_;
+  bool has_weights_;
 };
 
 }  // namespace caffe

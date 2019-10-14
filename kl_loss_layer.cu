@@ -5,8 +5,8 @@
 namespace caffe {
 template <typename Dtype>
 __global__ void KlForward(const int n, const Dtype* in, const Dtype* alpha, Dtype* out){
-// f(x) = e^(-alpha) * (x-1/2) + alpha/2    if |x| > 1
-//      = e^(-alpha) * x^2 * 1/2 + alpha/2  if |x| <= 1
+// f(x) = e^(-alpha) * (x-1/2*th) + alpha/2    if |x| > th
+//      = e^(-alpha) * x^2 * 1/2/th + alpha/2  if |x| <= th
   CUDA_KERNEL_LOOP(index, n) {
     Dtype x = in[index];
     Dtype abs_x = abs(x);
@@ -30,10 +30,17 @@ void KlLossLayer<Dtype>::Forward_gpu(const vector<Blob<Dtype>*>& bottom,
   KlForward<Dtype><<<CAFFE_GET_BLOCKS(count), CAFFE_CUDA_NUM_THREADS>>>(
     count, diff_.gpu_data(), bottom[1]->gpu_data(), error_.mutable_gpu_data());
   CUDA_POST_KERNEL_CHECK;
+ 
+  normalize_divider_=bottom[0]->count();
+  if (has_weights_) {
+    caffe_gpu_mul(count, bottom[3]->gpu_data(), error_.gpu_data(), error_.mutable_gpu_data());
+    caffe_gpu_asum(count, bottom[3]->gpu_data(), &normalize_divider_);
+  }
 
   Dtype loss;
-  caffe_gpu_dot(count, ones_.gpu_data(), error_.gpu_data(), &loss);
-  top[0]->mutable_cpu_data()[0] = loss / count;
+  caffe_gpu_asum(count, error_.mutable_gpu_data(), &loss);
+  normalize_divider_+=0.00001f;
+  top[0]->mutable_cpu_data()[0]=loss/normalize_divider_;
 }
 
 template <typename Dtype>
@@ -72,18 +79,21 @@ __global__ void KlBackward(const int n, const Dtype* in1, const Dtype* in2,
 template <typename Dtype>
 void KlLossLayer<Dtype>::Backward_gpu(const vector<Blob<Dtype>*>& top,
     const vector<bool>& propagate_down, const vector<Blob<Dtype>*>& bottom) {
-  if (propagate_down[2]){
-    LOG(FATAL) << this->type() << "Layer cannot backpropage to gt input!";
-  }
   if (propagate_down[0] && propagate_down[1]){
     int count = diff_.count();
     Dtype* bottom_diff1 = bottom[0]->mutable_gpu_diff();
     Dtype* bottom_diff2 = bottom[1]->mutable_gpu_diff();
+
     KlBackward<Dtype><<<CAFFE_GET_BLOCKS(count), CAFFE_CUDA_NUM_THREADS>>>(
       count, diff_.gpu_data(), bottom[0]->gpu_data(),bottom[2]->gpu_data(),
       bottom[1]->gpu_data(), bottom_diff1, bottom_diff2);
     CUDA_POST_KERNEL_CHECK;
-    const  Dtype loss_weight = top[0]->cpu_diff()[0] / count;
+    if (has_weights_) {
+      const Dtype* label_weight = bottom[3]->gpu_data();
+      caffe_gpu_mul(count, label_weight, bottom[0]->gpu_diff(), bottom_diff1);
+      caffe_gpu_mul(count, label_weight, bottom[1]->gpu_diff(), bottom_diff2);
+    }
+    const Dtype loss_weight = top[0]->cpu_diff()[0] / normalize_divider_;
     caffe_gpu_scal(count, loss_weight , bottom_diff1);
     caffe_gpu_scal(count, loss_weight , bottom_diff2);
   }
